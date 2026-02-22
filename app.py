@@ -1098,8 +1098,7 @@ st.markdown(f"""
 <div style="text-align:center;color:{C['footer_text']};font-size:0.74rem;
             padding:10px 0 18px 0;letter-spacing:0.02em;">
   YouTube Performance Predictor &nbsp;&middot;&nbsp;
-  Rashmi Jayawardhana &nbsp;&middot;&nbsp; 214093E &nbsp;&middot;&nbsp;
-  University of Moratuwa 2026 &nbsp;&middot;&nbsp;
+  Rashmi Jayawardhana &nbsp;&middot;&nbsp;
   XGBoost + Explainable AI &nbsp;&middot;&nbsp; Pre-Upload Features Only
 </div>
 """, unsafe_allow_html=True)
