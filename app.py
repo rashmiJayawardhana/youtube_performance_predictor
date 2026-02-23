@@ -1089,7 +1089,7 @@ with tab3:
     st.plotly_chart(cm_fig, use_container_width=True)
 
     st.markdown("---")
-    st.markdown(f"<h5 style='color:{C['text_primary']};'>Dataset — Three Sri Lankan YouTube Channels</h5>",
+    st.markdown(f"<h5 style='color:{C['text_primary']};'>Dataset - Three Sri Lankan YouTube Channels</h5>",
                 unsafe_allow_html=True)
     st.dataframe(pd.DataFrame({
         "Channel":     ["Rasmi Vibes", "Hey Lee", "Timeline of Nuraj"],
@@ -1178,7 +1178,6 @@ st.markdown(f"""
 <div style="text-align:center;color:{C['footer_text']};font-size:0.74rem;
             padding:10px 0 18px 0;letter-spacing:0.02em;">
   YouTube Performance Predictor &nbsp;&middot;&nbsp;
-  Rashmi Jayawardhana &nbsp;&middot;&nbsp;
   XGBoost + Explainable AI &nbsp;&middot;&nbsp; Pre-Upload Features Only
 </div>
 """, unsafe_allow_html=True)
