@@ -24,9 +24,14 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ─── Session state: theme ─────────────────────────────────────────────────────
+# ─── Session state ───────────────────────────────────────────────────────────
 if "theme" not in st.session_state:
     st.session_state.theme = "light"
+if "predicted" not in st.session_state:
+    st.session_state.predicted = False
+# stored snapshot of the last prediction
+if "snap" not in st.session_state:
+    st.session_state.snap = {}
 
 T = st.session_state.theme  # "light" | "dark"
 
@@ -253,6 +258,11 @@ html, body {{ background: {C["bg_app"]} !important; }}
 header[data-testid="stHeader"] {{
     background: {C["bg_app"]} !important;
     border-bottom: 1px solid {C["border"]};
+}}
+
+/* Hide the Deploy button */
+[data-testid="stAppDeployButton"] {{
+    display: none !important;
 }}
 
 /* Main content */
@@ -673,6 +683,43 @@ with st.sidebar:
     st.divider()
     predict_btn = st.button("Predict Performance", use_container_width=True, type="primary")
 
+# ─── Run prediction on button click ──────────────────────────────────────────
+if predict_btn and model is not None:
+    features_list = meta["features"]
+    _is_short    = int(duration_input <= 60)
+    _dur_cat     = 0 if duration_input <= 60 else (1 if duration_input <= 300 else (2 if duration_input <= 600 else 3))
+    _input = {
+        "duration_sec": duration_input, "is_short": _is_short,
+        "duration_category": _dur_cat,
+        "title_length": title_feats["title_length"], "word_count": title_feats["word_count"],
+        "hashtag_count": title_feats["hashtag_count"], "has_hashtag": title_feats["has_hashtag"],
+        "has_emoji": title_feats["has_emoji"], "has_sinhala": title_feats["has_sinhala"],
+        "has_english": title_feats["has_english"], "is_bilingual": title_feats["is_bilingual"],
+        "has_numbers": title_feats["has_numbers"], "has_question": title_feats["has_question"],
+        "pipe_count": title_feats["pipe_count"], "exclaim_count": title_feats["exclaim_count"],
+        "publish_month": pub_month, "publish_dow": pub_dow, "is_weekend": is_weekend,
+        "channel_subscribers": channel_subscribers, "channel_age_days": channel_age_days,
+    }
+    _X       = pd.DataFrame([_input])[features_list]
+    _prob_hi = float(model.predict_proba(_X)[0, 1])
+    st.session_state.snap = {
+        "input_dict":           _input,
+        "X_input":              _X,
+        "features_list":        features_list,
+        "prob_high":            _prob_hi,
+        "prediction":           int(_prob_hi >= 0.5),
+        "prob_low":             1 - _prob_hi,
+        "dur_label":            dur_label,
+        "lang":                 lang,
+        "title_feats":          dict(title_feats),
+        "pub_dow":              pub_dow,
+        "pub_month":            pub_month,
+        "channel_subscribers":  channel_subscribers,
+        "duration_input":       duration_input,
+    }
+    st.session_state.predicted = True
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # HERO HEADER
 # ─────────────────────────────────────────────────────────────────────────────
@@ -693,27 +740,22 @@ if model is None:
     st.error("Model not found. Run `python main.py` then `python save_model.py`, then refresh.")
     st.stop()
 
-# ─── Feature vector ───────────────────────────────────────────────────────────
-features_list = meta["features"]
-is_short      = int(duration_input <= 60)
-dur_cat_val   = 0 if duration_input <= 60 else (1 if duration_input <= 300 else (2 if duration_input <= 600 else 3))
-
-input_dict = {
-    "duration_sec": duration_input, "is_short": is_short,
-    "duration_category": dur_cat_val,
-    "title_length": title_feats["title_length"], "word_count": title_feats["word_count"],
-    "hashtag_count": title_feats["hashtag_count"], "has_hashtag": title_feats["has_hashtag"],
-    "has_emoji": title_feats["has_emoji"], "has_sinhala": title_feats["has_sinhala"],
-    "has_english": title_feats["has_english"], "is_bilingual": title_feats["is_bilingual"],
-    "has_numbers": title_feats["has_numbers"], "has_question": title_feats["has_question"],
-    "pipe_count": title_feats["pipe_count"], "exclaim_count": title_feats["exclaim_count"],
-    "publish_month": pub_month, "publish_dow": pub_dow, "is_weekend": is_weekend,
-    "channel_subscribers": channel_subscribers, "channel_age_days": channel_age_days,
-}
-X_input    = pd.DataFrame([input_dict])[features_list]
-prob_high  = model.predict_proba(X_input)[0, 1]
-prediction = int(prob_high >= 0.5)
-prob_low   = 1 - prob_high
+# ─── Unpack last prediction snapshot (if any) ────────────────────────────────
+_s = st.session_state.snap
+if st.session_state.predicted:
+    input_dict    = _s["input_dict"]
+    X_input       = _s["X_input"]
+    features_list = _s["features_list"]
+    prob_high     = _s["prob_high"]
+    prediction    = _s["prediction"]
+    prob_low      = _s["prob_low"]
+    _dur_label    = _s["dur_label"]
+    _lang         = _s["lang"]
+    _title_feats  = _s["title_feats"]
+    _pub_dow      = _s["pub_dow"]
+    _pub_month    = _s["pub_month"]
+    _ch_subs      = _s["channel_subscribers"]
+    _dur_input    = _s["duration_input"]
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TABS
@@ -729,132 +771,158 @@ tab1, tab2, tab3, tab4 = st.tabs([
 # TAB 1 — PREDICTION
 # ══════════════════════════════════════════════════════════════════════════════
 with tab1:
-    st.markdown(f"<h3 style='color:{C['text_primary']};margin-top:4px;'>Prediction Result</h3>",
-                unsafe_allow_html=True)
-    col_res, col_viz = st.columns([1, 1], gap="large")
-
-    with col_res:
-        if prediction == 1:
-            st.markdown(f"""
-            <div class="predict-card-high">
-              <div style="font-size:2.8rem;margin-bottom:6px;">&#127942;</div>
-              <div style="font-size:1.35rem;font-weight:800;color:{C['result_high_clr']};
-                          letter-spacing:-0.5px;">HIGH PERFORMER</div>
-              <div style="font-size:2.6rem;font-weight:800;color:{C['result_high_num']};
-                          margin:10px 0;line-height:1;">{prob_high*100:.1f}%</div>
-              <div style="font-size:0.83rem;color:{C['text_secondary']};">
-                probability of above-median views
-              </div>
-            </div>""", unsafe_allow_html=True)
-        else:
-            st.markdown(f"""
-            <div class="predict-card-low">
-              <div style="font-size:2.8rem;margin-bottom:6px;">&#128201;</div>
-              <div style="font-size:1.35rem;font-weight:800;color:{C['result_low_clr']};
-                          letter-spacing:-0.5px;">BELOW MEDIAN</div>
-              <div style="font-size:2.6rem;font-weight:800;color:{C['result_low_num']};
-                          margin:10px 0;line-height:1;">{prob_low*100:.1f}%</div>
-              <div style="font-size:0.83rem;color:{C['text_secondary']};">
-                probability of below-median views
-              </div>
-            </div>""", unsafe_allow_html=True)
-
-        st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
-        st.markdown(f"<b style='color:{C['text_primary']};font-size:0.9rem;'>Your Settings</b>",
+    if not st.session_state.predicted:
+        # ── Welcome / placeholder state ────────────────────────────────────
+        st.markdown(f"""
+        <div style="text-align:center;padding:60px 20px 70px 20px;">
+          <div style="font-size:3.5rem;margin-bottom:16px;">&#127916;</div>
+          <div style="font-size:1.4rem;font-weight:700;color:{C['text_primary']};margin-bottom:10px;">
+            Ready to Predict
+          </div>
+          <div style="font-size:0.95rem;color:{C['text_secondary']};max-width:480px;
+                      margin:0 auto;line-height:1.7;">
+            Configure your video settings in the sidebar — channel, duration,
+            title, and publish timing — then click
+            <b style="color:{C['accent']};">Predict Performance</b> to see
+            how your video is likely to perform before uploading.
+          </div>
+          <div style="margin-top:28px;">
+            <span style="display:inline-flex;align-items:center;gap:8px;
+                         background:{C['accent_light']};color:{C['accent_text']};
+                         padding:10px 22px;border-radius:99px;
+                         font-size:0.85rem;font-weight:600;
+                         border:1px solid {C['accent']}33;">
+              &#8592; Configure your settings in the sidebar, then click Predict
+            </span>
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        # ── Results ────────────────────────────────────────────────────────
+        st.markdown(f"<h3 style='color:{C['text_primary']};margin-top:4px;'>Prediction Result</h3>",
                     unsafe_allow_html=True)
-        settings_df = pd.DataFrame({
-            "Setting": ["Duration","Title Length","Hashtags","Language","Publish Day","Channel Size"],
-            "Value":   [dur_label, f"{title_feats['title_length']} chars",
-                        f"{title_feats['hashtag_count']} hashtags", lang,
-                        f"{DOW_NAMES[pub_dow]}, {MONTH_NAMES[pub_month-1]}",
-                        f"{channel_subscribers:,} subscribers"],
-        })
-        st.dataframe(settings_df, hide_index=True, use_container_width=True)
+        col_res, col_viz = st.columns([1, 1], gap="large")
 
-    with col_viz:
-        # Gauge
-        g_color = C["bar_high_line"] if prediction == 1 else C["bar_low_line"]
-        fig_g = go.Figure(go.Indicator(
-            mode="gauge+number+delta",
-            value=prob_high * 100,
-            title={"text": "P(High Performer)", "font": {"size": 14, "color": C["axis"]}},
-            delta={"reference": 50,
-                   "increasing": {"color": C["bar_high_line"]},
-                   "decreasing": {"color": C["bar_low_line"]}},
-            number={"suffix": "%", "font": {"size": 34, "color": C["font_clr"]}},
-            gauge={
-                "axis": {"range": [0, 100], "tickcolor": C["axis"],
-                         "tickfont": {"color": C["axis"]}},
-                "bar":  {"color": g_color},
-                "bgcolor": C["gauge_bg"],
-                "borderwidth": 1, "bordercolor": C["gauge_brd"],
-                "steps": [
-                    {"range": [0,  50], "color": C["step_low"]},
-                    {"range": [50,100], "color": C["step_high"]},
-                ],
-                "threshold": {"line": {"color": C["accent"], "width": 3},
-                              "thickness": 0.8, "value": 50},
-            },
-        ))
-        fig_g.update_layout(**plot_layout(height=275))
-        st.plotly_chart(fig_g, use_container_width=True)
+        with col_res:
+            if prediction == 1:
+                st.markdown(f"""
+                <div class="predict-card-high">
+                  <div style="font-size:2.8rem;margin-bottom:6px;">&#127942;</div>
+                  <div style="font-size:1.35rem;font-weight:800;color:{C['result_high_clr']};
+                              letter-spacing:-0.5px;">HIGH PERFORMER</div>
+                  <div style="font-size:2.6rem;font-weight:800;color:{C['result_high_num']};
+                              margin:10px 0;line-height:1;">{prob_high*100:.1f}%</div>
+                  <div style="font-size:0.83rem;color:{C['text_secondary']};">
+                    probability of above-median views
+                  </div>
+                </div>""", unsafe_allow_html=True)
+            else:
+                st.markdown(f"""
+                <div class="predict-card-low">
+                  <div style="font-size:2.8rem;margin-bottom:6px;">&#128201;</div>
+                  <div style="font-size:1.35rem;font-weight:800;color:{C['result_low_clr']};
+                              letter-spacing:-0.5px;">BELOW MEDIAN</div>
+                  <div style="font-size:2.6rem;font-weight:800;color:{C['result_low_num']};
+                              margin:10px 0;line-height:1;">{prob_low*100:.1f}%</div>
+                  <div style="font-size:0.83rem;color:{C['text_secondary']};">
+                    probability of below-median views
+                  </div>
+                </div>""", unsafe_allow_html=True)
 
-        # Probability bar
-        fig_b = go.Figure()
-        fig_b.add_trace(go.Bar(
-            x=["Below Median", "High Performer"],
-            y=[prob_low * 100, prob_high * 100],
-            marker_color=[C["bar_low"], C["bar_high"]],
-            marker_line_color=[C["bar_low_line"], C["bar_high_line"]],
-            marker_line_width=1.5,
-            text=[f"{prob_low*100:.1f}%", f"{prob_high*100:.1f}%"],
-            textposition="outside",
-            textfont=dict(size=14, color=C["font_clr"], family="Inter"),
-        ))
-        fig_b.add_hline(y=50, line_dash="dash", line_color=C["hline"],
-                        annotation_text="Baseline (50%)", annotation_position="right",
-                        annotation_font_color=C["hline"])
-        fig_b.update_layout(**plot_layout(
-            height=230, showlegend=False,
-            yaxis=dict(gridcolor=C["grid"], range=[0, 120],
-                       title="Probability (%)", color=C["axis"]),
-            xaxis=dict(color=C["axis"]),
-        ))
-        st.plotly_chart(fig_b, use_container_width=True)
+            st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
+            st.markdown(f"<b style='color:{C['text_primary']};font-size:0.9rem;'>Settings Used</b>",
+                        unsafe_allow_html=True)
+            settings_df = pd.DataFrame({
+                "Setting": ["Duration","Title Length","Hashtags","Language","Publish Day","Channel Size"],
+                "Value":   [_dur_label, f"{_title_feats['title_length']} chars",
+                            f"{_title_feats['hashtag_count']} hashtags", _lang,
+                            f"{DOW_NAMES[_pub_dow]}, {MONTH_NAMES[_pub_month-1]}",
+                            f"{_ch_subs:,} subscribers"],
+            })
+            st.dataframe(settings_df, hide_index=True, use_container_width=True)
 
-    # Tips
-    st.markdown("---")
-    st.markdown(f"<h4 style='color:{C['text_primary']};'>Actionable Tips</h4>",
-                unsafe_allow_html=True)
-    tc1, tc2 = st.columns(2)
-    with tc1:
-        n_tags = title_feats["hashtag_count"]
-        if n_tags == 0:
-            st.markdown('<div class="warn-box"><b>No hashtags detected.</b> Adding 3–5 relevant hashtags increases discoverability significantly.</div>', unsafe_allow_html=True)
-        elif n_tags > 6:
-            st.markdown(f'<div class="warn-box"><b>{n_tags} hashtags is excessive.</b> YouTube recommends 3–5. Too many may be treated as spam.</div>', unsafe_allow_html=True)
-        else:
-            st.markdown(f'<div class="ok-box"><b>{n_tags} hashtags</b> — within the recommended 3–5 range.</div>', unsafe_allow_html=True)
+        with col_viz:
+            g_color = C["bar_high_line"] if prediction == 1 else C["bar_low_line"]
+            fig_g = go.Figure(go.Indicator(
+                mode="gauge+number+delta",
+                value=prob_high * 100,
+                title={"text": "P(High Performer)", "font": {"size": 14, "color": C["axis"]}},
+                delta={"reference": 50,
+                       "increasing": {"color": C["bar_high_line"]},
+                       "decreasing": {"color": C["bar_low_line"]}},
+                number={"suffix": "%", "font": {"size": 34, "color": C["font_clr"]}},
+                gauge={
+                    "axis": {"range": [0, 100], "tickcolor": C["axis"],
+                             "tickfont": {"color": C["axis"]}},
+                    "bar":  {"color": g_color},
+                    "bgcolor": C["gauge_bg"],
+                    "borderwidth": 1, "bordercolor": C["gauge_brd"],
+                    "steps": [
+                        {"range": [0,  50], "color": C["step_low"]},
+                        {"range": [50,100], "color": C["step_high"]},
+                    ],
+                    "threshold": {"line": {"color": C["accent"], "width": 3},
+                                  "thickness": 0.8, "value": 50},
+                },
+            ))
+            fig_g.update_layout(**plot_layout(height=275))
+            st.plotly_chart(fig_g, use_container_width=True)
 
-        if title_feats["is_bilingual"]:
-            st.markdown('<div class="ok-box"><b>Bilingual title detected</b> — Sinhala + English combination is associated with higher reach.</div>', unsafe_allow_html=True)
-        else:
-            st.markdown('<div class="tip-box"><b>Consider a bilingual title.</b> Sinhala + English titles perform better in Sri Lankan channels.</div>', unsafe_allow_html=True)
-    with tc2:
-        if duration_input <= 60:
-            st.markdown('<div class="ok-box"><b>YouTube Short (≤60s)</b> — receives an algorithmic boost on the Shorts feed.</div>', unsafe_allow_html=True)
-        elif 180 <= duration_input <= 480:
-            st.markdown('<div class="ok-box"><b>Optimal duration (3–8 min)</b> — this range correlates with good watch-through rates.</div>', unsafe_allow_html=True)
-        elif duration_input > 600:
-            st.markdown('<div class="warn-box"><b>Very long video (>10 min).</b> Ensure the content justifies the length — retention may drop.</div>', unsafe_allow_html=True)
+            fig_b = go.Figure()
+            fig_b.add_trace(go.Bar(
+                x=["Below Median", "High Performer"],
+                y=[prob_low * 100, prob_high * 100],
+                marker_color=[C["bar_low"], C["bar_high"]],
+                marker_line_color=[C["bar_low_line"], C["bar_high_line"]],
+                marker_line_width=1.5,
+                text=[f"{prob_low*100:.1f}%", f"{prob_high*100:.1f}%"],
+                textposition="outside",
+                textfont=dict(size=14, color=C["font_clr"], family="Inter"),
+            ))
+            fig_b.add_hline(y=50, line_dash="dash", line_color=C["hline"],
+                            annotation_text="Baseline (50%)", annotation_position="right",
+                            annotation_font_color=C["hline"])
+            fig_b.update_layout(**plot_layout(
+                height=230, showlegend=False,
+                yaxis=dict(gridcolor=C["grid"], range=[0, 120],
+                           title="Probability (%)", color=C["axis"]),
+                xaxis=dict(color=C["axis"]),
+            ))
+            st.plotly_chart(fig_b, use_container_width=True)
 
-        tl = title_feats["title_length"]
-        if tl < 40:
-            st.markdown(f'<div class="warn-box"><b>Short title ({tl} chars).</b> Longer, keyword-rich titles improve search visibility.</div>', unsafe_allow_html=True)
-        elif tl > 100:
-            st.markdown(f'<div class="warn-box"><b>Long title ({tl} chars).</b> YouTube truncates titles beyond ~70 chars in search results.</div>', unsafe_allow_html=True)
-        else:
-            st.markdown(f'<div class="ok-box"><b>Good title length ({tl} chars)</b> — keyword-rich and fully visible in search.</div>', unsafe_allow_html=True)
+        # Tips
+        st.markdown("---")
+        st.markdown(f"<h4 style='color:{C['text_primary']};'>Actionable Tips</h4>",
+                    unsafe_allow_html=True)
+        tc1, tc2 = st.columns(2)
+        with tc1:
+            n_tags = _title_feats["hashtag_count"]
+            if n_tags == 0:
+                st.markdown('<div class="warn-box"><b>No hashtags detected.</b> Adding 3–5 relevant hashtags increases discoverability significantly.</div>', unsafe_allow_html=True)
+            elif n_tags > 6:
+                st.markdown(f'<div class="warn-box"><b>{n_tags} hashtags is excessive.</b> YouTube recommends 3–5. Too many may be treated as spam.</div>', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<div class="ok-box"><b>{n_tags} hashtags</b> — within the recommended 3–5 range.</div>', unsafe_allow_html=True)
+
+            if _title_feats["is_bilingual"]:
+                st.markdown('<div class="ok-box"><b>Bilingual title detected</b> — Sinhala + English combination is associated with higher reach.</div>', unsafe_allow_html=True)
+            else:
+                st.markdown('<div class="tip-box"><b>Consider a bilingual title.</b> Sinhala + English titles perform better in Sri Lankan channels.</div>', unsafe_allow_html=True)
+        with tc2:
+            if _dur_input <= 60:
+                st.markdown('<div class="ok-box"><b>YouTube Short (≤60s)</b> — receives an algorithmic boost on the Shorts feed.</div>', unsafe_allow_html=True)
+            elif 180 <= _dur_input <= 480:
+                st.markdown('<div class="ok-box"><b>Optimal duration (3–8 min)</b> — this range correlates with good watch-through rates.</div>', unsafe_allow_html=True)
+            elif _dur_input > 600:
+                st.markdown('<div class="warn-box"><b>Very long video (>10 min).</b> Ensure the content justifies the length — retention may drop.</div>', unsafe_allow_html=True)
+
+            tl = _title_feats["title_length"]
+            if tl < 40:
+                st.markdown(f'<div class="warn-box"><b>Short title ({tl} chars).</b> Longer, keyword-rich titles improve search visibility.</div>', unsafe_allow_html=True)
+            elif tl > 100:
+                st.markdown(f'<div class="warn-box"><b>Long title ({tl} chars).</b> YouTube truncates titles beyond ~70 chars in search results.</div>', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<div class="ok-box"><b>Good title length ({tl} chars)</b> — keyword-rich and fully visible in search.</div>', unsafe_allow_html=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -863,51 +931,67 @@ with tab1:
 with tab2:
     st.markdown(f"<h3 style='color:{C['text_primary']};margin-top:4px;'>Feature Contribution Analysis</h3>",
                 unsafe_allow_html=True)
-    st.caption("Permutation-style feature attribution — which upload decisions pushed the "
-               "prediction toward or away from 'High Performer'. Analogous to SHAP values.")
 
-    with st.spinner("Computing feature contributions…"):
-        base_prob, contribs = compute_shap_like(model, X_input, features_list)
+    if not st.session_state.predicted:
+        # ── Placeholder ──────────────────────────────────────────────────────
+        st.markdown(f"""
+        <div style="text-align:center;padding:48px 20px 36px 20px;">
+          <div style="font-size:0.95rem;color:{C['text_secondary']};max-width:440px;
+                      margin:0 auto;line-height:1.7;">
+            Feature contribution charts will appear here after your first prediction.
+            Configure your video settings in the sidebar and click
+            <b style="color:{C['accent']};">Predict Performance</b>.
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        # ── SHAP-like contribution chart ──────────────────────────────────────
+        st.caption("Which upload decisions pushed the prediction toward or away from "
+                   "'High Performer'. Analogous to SHAP values.")
 
-    sorted_pairs = sorted(
-        zip(features_list,
-            [FLABELS.get(f, f) for f in features_list],
-            [contribs[f] for f in features_list],
-            [input_dict[f] for f in features_list]),
-        key=lambda x: abs(x[2]), reverse=True,
-    )
-    sp_rev = list(reversed(sorted_pairs[:15]))
+        with st.spinner("Computing feature contributions…"):
+            base_prob, contribs = compute_shap_like(model, X_input, features_list)
 
-    shap_colors = [C["shap_pos"] if v >= 0 else C["shap_neg"] for _, _, v, _ in sp_rev]
-    shap_lines  = [C["shap_pos_ln"] if v >= 0 else C["shap_neg_ln"] for _, _, v, _ in sp_rev]
+        sorted_pairs = sorted(
+            zip(features_list,
+                [FLABELS.get(f, f) for f in features_list],
+                [contribs[f] for f in features_list],
+                [input_dict[f] for f in features_list]),
+            key=lambda x: abs(x[2]), reverse=True,
+        )
+        sp_rev = list(reversed(sorted_pairs[:15]))
 
-    fig_shap = go.Figure(go.Bar(
-        x=[v for _, _, v, _ in sp_rev],
-        y=[n for _, n, _, _ in sp_rev],
-        orientation="h",
-        marker_color=shap_colors,
-        marker_line_color=shap_lines,
-        marker_line_width=1.2,
-        customdata=[[round(iv, 2)] for _, _, _, iv in sp_rev],
-        hovertemplate="<b>%{y}</b><br>Contribution: %{x:+.4f}<br>Input value: %{customdata[0]}<extra></extra>",
-    ))
-    fig_shap.add_vline(x=0, line_width=2, line_color=C["vline"])
-    fig_shap.update_layout(**plot_layout(
-        height=500,
-        xaxis=dict(title="Contribution to P(High Performer)",
-                   gridcolor=C["grid"], zerolinecolor=C["vline"], color=C["axis"]),
-        yaxis=dict(gridcolor="rgba(0,0,0,0)", color=C["font_clr"]),
-    ))
-    st.plotly_chart(fig_shap, use_container_width=True)
+        shap_colors = [C["shap_pos"] if v >= 0 else C["shap_neg"] for _, _, v, _ in sp_rev]
+        shap_lines  = [C["shap_pos_ln"] if v >= 0 else C["shap_neg_ln"] for _, _, v, _ in sp_rev]
 
-    st.markdown(f"<h5 style='color:{C['text_primary']};'>All Feature Values</h5>",
-                unsafe_allow_html=True)
-    rows = [{"Feature": n, "Your Input": iv,
-             "Contribution": f"{cv:+.4f}",
-             "Direction": "Helps" if cv > 0 else ("Hurts" if cv < 0 else "Neutral")}
-            for _, n, cv, iv in sorted_pairs]
-    st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+        fig_shap = go.Figure(go.Bar(
+            x=[v for _, _, v, _ in sp_rev],
+            y=[n for _, n, _, _ in sp_rev],
+            orientation="h",
+            marker_color=shap_colors,
+            marker_line_color=shap_lines,
+            marker_line_width=1.2,
+            customdata=[[round(iv, 2)] for _, _, _, iv in sp_rev],
+            hovertemplate="<b>%{y}</b><br>Contribution: %{x:+.4f}<br>Input value: %{customdata[0]}<extra></extra>",
+        ))
+        fig_shap.add_vline(x=0, line_width=2, line_color=C["vline"])
+        fig_shap.update_layout(**plot_layout(
+            height=500,
+            xaxis=dict(title="Contribution to P(High Performer)",
+                       gridcolor=C["grid"], zerolinecolor=C["vline"], color=C["axis"]),
+            yaxis=dict(gridcolor="rgba(0,0,0,0)", color=C["font_clr"]),
+        ))
+        st.plotly_chart(fig_shap, use_container_width=True)
 
+        st.markdown(f"<h5 style='color:{C['text_primary']};'>All Feature Values</h5>",
+                    unsafe_allow_html=True)
+        rows = [{"Feature": n, "Your Input": iv,
+                 "Contribution": f"{cv:+.4f}",
+                 "Direction": "Helps" if cv > 0 else ("Hurts" if cv < 0 else "Neutral")}
+                for _, n, cv, iv in sorted_pairs]
+        st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+
+    # Global importance always shown (no prediction needed)
     st.markdown("---")
     st.markdown(f"<h4 style='color:{C['text_primary']};'>Global Feature Importance (XGBoost)</h4>",
                 unsafe_allow_html=True)
@@ -1027,10 +1111,10 @@ with tab4:
     with col_a:
         st.markdown(f"""
 <div class="yt-card">
-<h4 style="color:{C['accent']};margin-top:0;">Algorithm — XGBoost</h4>
+<h4 style="color:{C['accent']};margin-top:0;">Algorithm: XGBoost</h4>
 
-**XGBoost** (eXtreme Gradient Boosting) builds decision trees *sequentially* —
-each new tree corrects the residual errors of the previous ones.
+**XGBoost** (eXtreme Gradient Boosting) builds decision trees *sequentially*.
+Each new tree corrects the residual errors of the previous ones.
 
 1. Start with a base prediction (class prior)
 2. Compute residual errors
@@ -1056,8 +1140,8 @@ Only features available **before upload** are used:
 | Timing  | Month, Day of Week, Weekend |
 | Channel | Subscribers, Age (days) |
 
-**Excluded:** Views, Likes, Comments, Watch Time, CTR —
-all post-publication metrics that would cause circular reasoning.
+**Excluded features:** Views, Likes, Comments, Watch Time, and CTR.
+These are all post-publication metrics that would cause circular reasoning.
 </div>""", unsafe_allow_html=True)
 
     st.markdown("---")
@@ -1068,7 +1152,9 @@ all post-publication metrics that would cause circular reasoning.
 A video is labelled **"High Performer"** if its views ≥ the channel's own median.
 This neutralises subscriber-count differences across channels:
 
-- **Rasmi Vibes** → median ≈ 688 views &nbsp;&nbsp; **Hey Lee** → median ≈ 3,604 views &nbsp;&nbsp; **Timeline of Nuraj** → median ≈ 4,210 views
+- **Rasmi Vibes:** median ≈ 688 views
+- **Hey Lee:** median ≈ 3,604 views
+- **Timeline of Nuraj:** median ≈ 4,210 views
 
 A fixed threshold (e.g. "1000 views = viral") would be unfair across channels of
 different sizes. The per-channel median ensures a balanced 50/50 class split.
@@ -1079,18 +1165,12 @@ different sizes. The per-channel median ensures a balanced 50/50 class split.
 For each prediction, feature contributions are estimated by randomly perturbing
 each feature and measuring how much the predicted probability changes.
 Features that cause large changes when perturbed are most influential for
-*that specific prediction* — analogous to SHAP's Kernel method applied locally.
+that specific prediction. This is analogous to SHAP's Kernel method applied locally.
 </div>""", unsafe_allow_html=True)
 
-    col_c, col_d = st.columns(2)
-    with col_c:
-        st.info("**Assignment:** ML Assignment — Predicting YouTube Video Upload Success\n\n"
-                "**Student:** Rashmi Jayawardhana (214093E)\n\n"
-                "**University:** University of Moratuwa · Dept. of Electronic & Telecommunication Engineering")
-    with col_d:
-        st.success("**Test Accuracy:** 71.4%  ·  **Cross-Validation:** 72.7%\n\n"
-                   "**Random Baseline:** 50.0%\n\n"
-                   "**Improvement:** +21.4 percentage points over random prediction")
+    st.success("**Test Accuracy:** 71.4%  ·  **Cross-Validation:** 72.7%\n\n"
+               "**Random Baseline:** 50.0%\n\n"
+               "**Improvement:** +21.4 percentage points over random prediction")
 
 # ─── Footer ───────────────────────────────────────────────────────────────────
 st.markdown(f"""

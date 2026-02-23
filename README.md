@@ -2,6 +2,15 @@
 **Predicting YouTube Video Upload Success for Sri Lankan Creators**  
 *A Pre-Upload Feature Classification Study Using XGBoost*  
 
+[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://youtube-performance-predictor.streamlit.app/)
+
+## 🌐 Live Demo
+
+> **Try the app online — no installation required:**  
+> 👉 **[https://youtube-performance-predictor.streamlit.app/](https://youtube-performance-predictor.streamlit.app/)**
+
+Enter a video title, set your channel details, choose a publish date, and get an instant prediction on whether your video will perform above your channel's median — along with feature-level explanations.
+
 ---
 
 ## Project Structure

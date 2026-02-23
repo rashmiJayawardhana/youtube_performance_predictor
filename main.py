@@ -3,7 +3,6 @@
 ML ASSIGNMENT — Predicting YouTube Video Upload Success for Sri Lankan Creators
 A Pre-Upload Feature Classification Study Using XGBoost
 =============================================================================
-Author   : [Rashmi Jayawardhana]  
 Channels : Rasmi Vibes | Hey Lee | Timeline of Nuraj  (275 videos total)
 Algorithm: XGBoost (Gradient Boosting)
 XAI      : Feature Importance + Permutation Importance + PDP + SHAP-like
@@ -36,11 +35,11 @@ warnings.filterwarnings('ignore')
 try:
     from xgboost import XGBClassifier
     USE_XGBOOST = True
-    print("✅ XGBoost loaded successfully")
+    print("XGBoost loaded successfully")
 except ImportError:
     from sklearn.ensemble import GradientBoostingClassifier as XGBClassifier
     USE_XGBOOST = False
-    print("⚠️  XGBoost not installed — using sklearn GradientBoostingClassifier (equivalent)")
+    print("   XGBoost not installed — using sklearn GradientBoostingClassifier (equivalent)")
     print("   Install XGBoost with: pip install xgboost")
 
 from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold
@@ -64,7 +63,7 @@ FILE_C = os.path.join(SCRIPT_DIR, 'data', 'Sorted_by_Content_-_Timeline_of_Nuraj
 for fpath in [FILE_A, FILE_B, FILE_C]:
     if not os.path.exists(fpath):
         raise FileNotFoundError(
-            f"\n❌ Required data file not found:\n   {fpath}\n\n"
+            f"\nRequired data file not found:\n   {fpath}\n\n"
             "Please place the three Excel files exported from YouTube Studio\n"
             "inside the  data/  subfolder of this project:\n"
             "  data/Content_Excel_file_-_Rasmi_Vibes.xlsx\n"
@@ -186,7 +185,7 @@ X = combined[FEATURES].copy()
 y = combined[TARGET].copy()
 
 print(f"\nCombined dataset : {len(X)} videos × {len(FEATURES)} features")
-print(f"Missing values   : {X.isnull().sum().sum()} ✅ (none)")
+print(f"Missing values   : {X.isnull().sum().sum()}  (none)")
 print(f"High performers  : {y.sum()} ({y.mean()*100:.1f}%)")
 print(f"Low performers   : {(y==0).sum()} ({(1-y.mean())*100:.1f}%)")
 print(f"\nPer-channel breakdown:")
@@ -432,7 +431,7 @@ ax[1, 1].set_ylim(0.3, 1.0); ax[1, 1].legend(); ax[1, 1].grid(True, alpha=0.3)
 plt.tight_layout()
 plt.savefig(os.path.join(OUTPUT_DIR, '02_evaluation.png'), dpi=150, bbox_inches='tight')
 plt.close()
-print("💾 Saved: outputs/02_evaluation.png")
+print("Saved: outputs/02_evaluation.png")
 
 # ── Plot 3: Feature Importance ─────────────────────────────────────────────
 fig, ax = plt.subplots(1, 2, figsize=(18, 8))
@@ -464,7 +463,7 @@ ax[1].set_xlabel('Mean Accuracy Decrease')
 plt.tight_layout()
 plt.savefig(os.path.join(OUTPUT_DIR, '03_importance.png'), dpi=150, bbox_inches='tight')
 plt.close()
-print("💾 Saved: outputs/03_importance.png")
+print("Saved: outputs/03_importance.png")
 
 # ── Plot 4: PDP ────────────────────────────────────────────────────────────
 fig, ax = plt.subplots(2, 2, figsize=(14, 11))
@@ -492,7 +491,7 @@ for a, fi_i in zip(ax.flat, np.argsort(fi)[::-1][:4]):
 plt.tight_layout()
 plt.savefig(os.path.join(OUTPUT_DIR, '04_pdp.png'), dpi=150, bbox_inches='tight')
 plt.close()
-print("💾 Saved: outputs/04_pdp.png")
+print("Saved: outputs/04_pdp.png")
 
 # ── Plot 5: SHAP-like + Cross-channel ──────────────────────────────────────
 fig, ax = plt.subplots(1, 2, figsize=(18, 8))
@@ -541,7 +540,7 @@ ax[1].set_ylabel('Importance Score'); ax[1].legend()
 plt.tight_layout()
 plt.savefig(os.path.join(OUTPUT_DIR, '05_shap.png'), dpi=150, bbox_inches='tight')
 plt.close()
-print("💾 Saved: outputs/05_shap.png")
+print("Saved: outputs/05_shap.png")
 
 # =============================================================================
 # FINAL SUMMARY

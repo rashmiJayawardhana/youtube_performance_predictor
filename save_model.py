@@ -30,7 +30,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CSV_PATH = os.path.join(SCRIPT_DIR, 'outputs', 'dataset_combined.csv')
 if not os.path.exists(CSV_PATH):
     raise FileNotFoundError(
-        "❌ outputs/dataset_combined.csv not found. Run main.py first.")
+        "outputs/dataset_combined.csv not found. Run main.py first.")
 
 combined = pd.read_csv(CSV_PATH)
 
@@ -88,8 +88,8 @@ meta = {
 with open(os.path.join(ARTIFACT_DIR, 'model_meta.json'), 'w') as f:
     json.dump(meta, f, indent=2)
 
-print("✅ Model saved to model_artifacts/xgb_model.pkl")
-print("✅ Metadata saved to model_artifacts/model_meta.json")
+print("Model saved to model_artifacts/xgb_model.pkl")
+print("Metadata saved to model_artifacts/model_meta.json")
 print(f"\nModel trained on {len(X_train)} videos.")
 print(f"Feature importances (top 5):")
 fi_sorted = sorted(zip(FEATURES, model.feature_importances_),
